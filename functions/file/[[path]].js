@@ -94,8 +94,14 @@ export async function onRequest(context) {  // Contents of context object
     if (imgRecord.metadata?.Channel === 'External') {
         const externalLink = imgRecord.metadata?.ExternalLink;
         
+        // 调试信息：记录外链和渠道信息
+        console.log('External Link detected:', externalLink);
+        console.log('Channel:', imgRecord.metadata?.Channel);
+        console.log('Is Pixiv?', externalLink && externalLink.includes('pximg.net'));
+        
         // 判断是否为 Pixiv 图片域名
         if (externalLink && externalLink.includes('pximg.net')) {
+            console.log('Processing Pixiv image with proxy...');
             // Pixiv 图片需要代理访问，设置正确的 Referer
             try {
                 const response = await fetch(externalLink, {
@@ -104,6 +110,8 @@ export async function onRequest(context) {  // Contents of context object
                         'User-Agent': request.headers.get('User-Agent') || 'Mozilla/5.0'
                     }
                 });
+
+                console.log('Pixiv response status:', response.status);
 
                 if (!response.ok) {
                     return new Response(`Error: Failed to fetch image from Pixiv (${response.status})`, { status: response.status });
@@ -119,9 +127,11 @@ export async function onRequest(context) {  // Contents of context object
                     }
                 });
             } catch (error) {
+                console.error('Pixiv fetch error:', error);
                 return new Response(`Error: Failed to fetch Pixiv image - ${error.message}`, { status: 500 });
             }
         } else {
+            console.log('Non-Pixiv link, redirecting...');
             // 非 Pixiv 链接，直接重定向
             return Response.redirect(externalLink, 302);
         }
