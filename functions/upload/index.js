@@ -579,11 +579,13 @@ async function uploadFileToExternal(context, fullId, metadata, returnLink) {
         return createResponse('Error: No url provided', { status: 400 });
     }
 
+    console.log('[uploadFileToExternal] Processing external URL:', extUrl);
+
     // 判断是否为 Pixiv 链接
     if (extUrl.includes('pximg.net')) {
         try {
             // 1. 下载 Pixiv 图片（设置正确的 Referer）
-            console.log('Fetching Pixiv image:', extUrl);
+            console.log('[uploadFileToExternal] Detected Pixiv URL, fetching image...');
             const response = await fetch(extUrl, {
                 headers: {
                     'Referer': 'https://www.pixiv.net/',
@@ -592,7 +594,7 @@ async function uploadFileToExternal(context, fullId, metadata, returnLink) {
             });
 
             if (!response.ok) {
-                console.error('Failed to fetch Pixiv image:', response.status, response.statusText);
+                console.error('[uploadFileToExternal] Failed to fetch Pixiv image:', response.status, response.statusText);
                 return createResponse(`Error: Failed to fetch Pixiv image (${response.status} ${response.statusText})`, { status: 500 });
             }
 
@@ -602,35 +604,44 @@ async function uploadFileToExternal(context, fullId, metadata, returnLink) {
             const contentType = response.headers.get('Content-Type') || 'image/jpeg';
             const file = new File([blob], fileName, { type: contentType });
 
-            console.log('Pixiv image downloaded:', fileName, 'size:', blob.size, 'type:', contentType);
+            console.log('[uploadFileToExternal] Pixiv image downloaded successfully:', {
+                fileName,
+                size: blob.size,
+                type: contentType
+            });
 
             // 3. 替换 formdata 中的 file，移除 url 字段
             formdata.set('file', file);
             formdata.delete('url');
             
             // 4. 修改 URL 参数，移除 external 渠道，使用默认渠道（Telegram）
-            // 创建新的 URL 对象，移除 uploadChannel=external 参数
             const newUrl = new URL(url.toString());
             const originalChannel = newUrl.searchParams.get('uploadChannel');
+            
+            console.log('[uploadFileToExternal] Original uploadChannel:', originalChannel);
             
             // 如果原来是 external，改为 telegram（或者删除参数使用默认值）
             if (originalChannel === 'external') {
                 newUrl.searchParams.delete('uploadChannel');
-                // 或者显式设置为 telegram
-                // newUrl.searchParams.set('uploadChannel', 'telegram');
+                console.log('[uploadFileToExternal] Removed uploadChannel parameter, will use default (Telegram)');
             }
             
             // 更新 context 中的 url
             context.url = newUrl;
             
             // 5. 重新调用 processFileUpload，这次会走正常的上传流程
-            return await processFileUpload(context, formdata);
+            console.log('[uploadFileToExternal] Re-calling processFileUpload with downloaded file');
+            const result = await processFileUpload(context, formdata);
+            console.log('[uploadFileToExternal] Upload completed, status:', result.status);
+            return result;
 
         } catch (error) {
-            console.error('Error processing Pixiv image:', error);
+            console.error('[uploadFileToExternal] Error processing Pixiv image:', error);
             return createResponse(`Error: Failed to process Pixiv image - ${error.message}`, { status: 500 });
         }
     }
+
+    console.log('[uploadFileToExternal] Non-Pixiv URL, saving as external link');
 
     // 非 Pixiv 链接，保持原有逻辑（只保存链接地址）
     metadata.Channel = "External";
