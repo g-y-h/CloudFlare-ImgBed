@@ -570,7 +570,7 @@ async function uploadFileToTelegram(context, fullId, metadata, fileExt, fileName
 
 // 外链渠道
 async function uploadFileToExternal(context, fullId, metadata, returnLink) {
-    const { env, waitUntil, formdata } = context;
+    const { env, waitUntil, formdata, url } = context;
     const db = getDatabase(env);
 
     // 从 formdata 中获取外链
@@ -604,11 +604,26 @@ async function uploadFileToExternal(context, fullId, metadata, returnLink) {
 
             console.log('Pixiv image downloaded:', fileName, 'size:', blob.size, 'type:', contentType);
 
-            // 3. 替换 formdata 中的 file
+            // 3. 替换 formdata 中的 file，移除 url 字段
             formdata.set('file', file);
+            formdata.delete('url');
             
-            // 4. 调用正常的文件上传处理（会上传到 Telegram/R2/S3 等）
-            // 注意：这里会根据 uploadChannel 参数上传到对应的存储渠道
+            // 4. 修改 URL 参数，移除 external 渠道，使用默认渠道（Telegram）
+            // 创建新的 URL 对象，移除 uploadChannel=external 参数
+            const newUrl = new URL(url.toString());
+            const originalChannel = newUrl.searchParams.get('uploadChannel');
+            
+            // 如果原来是 external，改为 telegram（或者删除参数使用默认值）
+            if (originalChannel === 'external') {
+                newUrl.searchParams.delete('uploadChannel');
+                // 或者显式设置为 telegram
+                // newUrl.searchParams.set('uploadChannel', 'telegram');
+            }
+            
+            // 更新 context 中的 url
+            context.url = newUrl;
+            
+            // 5. 重新调用 processFileUpload，这次会走正常的上传流程
             return await processFileUpload(context, formdata);
 
         } catch (error) {
