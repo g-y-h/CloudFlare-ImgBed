@@ -92,49 +92,8 @@ export async function onRequest(context) {  // Contents of context object
 
     /* 外链渠道 */
     if (imgRecord.metadata?.Channel === 'External') {
-        const externalLink = imgRecord.metadata?.ExternalLink;
-        
-        // 调试信息：记录外链和渠道信息
-        console.log('External Link detected:', externalLink);
-        console.log('Channel:', imgRecord.metadata?.Channel);
-        console.log('Is Pixiv?', externalLink && externalLink.includes('pximg.net'));
-        
-        // 判断是否为 Pixiv 图片域名
-        if (externalLink && externalLink.includes('pximg.net')) {
-            console.log('Processing Pixiv image with proxy...');
-            // Pixiv 图片需要代理访问，设置正确的 Referer
-            try {
-                const response = await fetch(externalLink, {
-                    headers: {
-                        'Referer': 'https://www.pixiv.net/',
-                        'User-Agent': request.headers.get('User-Agent') || 'Mozilla/5.0'
-                    }
-                });
-
-                console.log('Pixiv response status:', response.status);
-
-                if (!response.ok) {
-                    return new Response(`Error: Failed to fetch image from Pixiv (${response.status})`, { status: response.status });
-                }
-
-                // 返回图片内容
-                return new Response(response.body, {
-                    status: 200,
-                    headers: {
-                        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-                        'Cache-Control': 'public, max-age=31536000',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
-            } catch (error) {
-                console.error('Pixiv fetch error:', error);
-                return new Response(`Error: Failed to fetch Pixiv image - ${error.message}`, { status: 500 });
-            }
-        } else {
-            console.log('Non-Pixiv link, redirecting...');
-            // 非 Pixiv 链接，直接重定向
-            return Response.redirect(externalLink, 302);
-        }
+        // 直接重定向到外链
+        return Response.redirect(imgRecord.metadata?.ExternalLink, 302);
     }
 
     /* Telegram及Telegraph渠道 */
