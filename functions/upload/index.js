@@ -573,15 +573,55 @@ async function uploadFileToExternal(context, fullId, metadata, returnLink) {
     const { env, waitUntil, formdata } = context;
     const db = getDatabase(env);
 
-    // 直接将外链写入metadata
-    metadata.Channel = "External";
-    metadata.ChannelName = "External";
     // 从 formdata 中获取外链
     const extUrl = formdata.get('url');
     if (extUrl === null || extUrl === undefined) {
         return createResponse('Error: No url provided', { status: 400 });
     }
+
+    // 判断是否为 Pixiv 链接
+    if (extUrl.includes('pximg.net')) {
+        try {
+            // 1. 下载 Pixiv 图片（设置正确的 Referer）
+            console.log('Fetching Pixiv image:', extUrl);
+            const response = await fetch(extUrl, {
+                headers: {
+                    'Referer': 'https://www.pixiv.net/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch Pixiv image:', response.status, response.statusText);
+                return createResponse(`Error: Failed to fetch Pixiv image (${response.status} ${response.statusText})`, { status: 500 });
+            }
+
+            // 2. 将下载的图片转换为 File 对象
+            const blob = await response.blob();
+            const fileName = extUrl.split('/').pop() || 'pixiv_image.jpg';
+            const contentType = response.headers.get('Content-Type') || 'image/jpeg';
+            const file = new File([blob], fileName, { type: contentType });
+
+            console.log('Pixiv image downloaded:', fileName, 'size:', blob.size, 'type:', contentType);
+
+            // 3. 替换 formdata 中的 file
+            formdata.set('file', file);
+            
+            // 4. 调用正常的文件上传处理（会上传到 Telegram/R2/S3 等）
+            // 注意：这里会根据 uploadChannel 参数上传到对应的存储渠道
+            return await processFileUpload(context, formdata);
+
+        } catch (error) {
+            console.error('Error processing Pixiv image:', error);
+            return createResponse(`Error: Failed to process Pixiv image - ${error.message}`, { status: 500 });
+        }
+    }
+
+    // 非 Pixiv 链接，保持原有逻辑（只保存链接地址）
+    metadata.Channel = "External";
+    metadata.ChannelName = "External";
     metadata.ExternalLink = extUrl;
+    
     // 写入KV数据库
     try {
         await db.put(fullId, "", {
