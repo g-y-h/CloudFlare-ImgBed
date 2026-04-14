@@ -92,8 +92,39 @@ export async function onRequest(context) {  // Contents of context object
 
     /* 外链渠道 */
     if (imgRecord.metadata?.Channel === 'External') {
-        // 直接重定向到外链
-        return Response.redirect(imgRecord.metadata?.ExternalLink, 302);
+        const externalLink = imgRecord.metadata?.ExternalLink;
+        
+        // 判断是否为 Pixiv 图片域名
+        if (externalLink && externalLink.includes('pximg.net')) {
+            // Pixiv 图片需要代理访问，设置正确的 Referer
+            try {
+                const response = await fetch(externalLink, {
+                    headers: {
+                        'Referer': 'https://www.pixiv.net/',
+                        'User-Agent': request.headers.get('User-Agent') || 'Mozilla/5.0'
+                    }
+                });
+
+                if (!response.ok) {
+                    return new Response(`Error: Failed to fetch image from Pixiv (${response.status})`, { status: response.status });
+                }
+
+                // 返回图片内容
+                return new Response(response.body, {
+                    status: 200,
+                    headers: {
+                        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+                        'Cache-Control': 'public, max-age=31536000',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            } catch (error) {
+                return new Response(`Error: Failed to fetch Pixiv image - ${error.message}`, { status: 500 });
+            }
+        } else {
+            // 非 Pixiv 链接，直接重定向
+            return Response.redirect(externalLink, 302);
+        }
     }
 
     /* Telegram及Telegraph渠道 */
